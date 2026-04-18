@@ -10,12 +10,12 @@ from sklearn.model_selection import train_test_split, StratifiedKFold
 from sklearn.metrics import confusion_matrix
 
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression # 重新使用LogisticRegression
+from sklearn.linear_model import LogisticRegression 
 from sklearn.base import BaseEstimator, ClassifierMixin
 
 import xgboost as xgb
 
-# Removed: from imblearn.over_sampling import SMOTE # 移除SMOTE导入
+# Removed: from imblearn.over_sampling import SMOTE 
 
 warnings.filterwarnings("ignore")
 warnings.filterwarnings("ignore", message="The use_label_encoder parameter is deprecated and will be removed in a future release.")
@@ -81,7 +81,7 @@ class HDTTStackingClassifier(BaseEstimator, ClassifierMixin):
     def __init__(self, rf_params, xgb_params, meta_learner_params, seed=42, n_splits=5):
         self.rf_params = rf_params
         self.xgb_params = xgb_params
-        self.meta_learner_params = meta_learner_params # 这些现在是LogisticRegression的参数
+        self.meta_learner_params = meta_learner_params 
 
         self.seed = seed
         self.n_splits = n_splits
@@ -89,7 +89,7 @@ class HDTTStackingClassifier(BaseEstimator, ClassifierMixin):
         self.rf_model_full = RandomForestClassifier(**rf_params, random_state=seed)
         self.xgb_model_full = xgb.XGBClassifier(**xgb_params, random_state=seed, use_label_encoder=False, eval_metric="logloss")
         
-        # 核心修改：元学习器回归到LogisticRegression
+        
         self.meta_learner = LogisticRegression(**meta_learner_params, random_state=seed)
 
         self.is_fitted_ = False
@@ -102,7 +102,7 @@ class HDTTStackingClassifier(BaseEstimator, ClassifierMixin):
 
         skf = StratifiedKFold(n_splits=self.n_splits, shuffle=True, random_state=self.seed)
 
-        # OOF 预测：存储每个基模型对正类的预测概率
+        
         rf_oof = np.zeros((X.shape[0],), dtype=float)
         xgb_oof = np.zeros((X.shape[0],), dtype=float)
 
@@ -120,16 +120,15 @@ class HDTTStackingClassifier(BaseEstimator, ClassifierMixin):
             rf_oof[va] = fold_rf.predict_proba(X_va)[:, 1]
             xgb_oof[va] = fold_xgb.predict_proba(X_va)[:, 1]
 
-        # 在整个数据集上训练基模型
+        
         self.rf_model_full.fit(X, y)
         self.xgb_model_full.fit(X, y)
 
-        # 构建元学习器的输入特征：基模型的OOF预测概率 (仅正类概率)
-        # 形状为 (n_samples, 2) 即 [RF_P1, XGB_P1]
+       
         meta_X = np.column_stack([rf_oof, xgb_oof])
         
-        # 训练元学习器 (LogisticRegression可以直接处理class_weight)
-        self.meta_learner.fit(meta_X, y) # LogisticRegression会自动使用在meta_learner_params中设置的class_weight
+        
+        self.meta_learner.fit(meta_X, y)
 
         self.is_fitted_ = True
         return self
@@ -140,7 +139,7 @@ class HDTTStackingClassifier(BaseEstimator, ClassifierMixin):
         """
         if not hasattr(X, "iloc"):
             X = pd.DataFrame(X)
-        # 获取基模型对正类的预测概率
+        
         rf_p = self.rf_model_full.predict_proba(X)[:, 1]
         xgb_p = self.xgb_model_full.predict_proba(X)[:, 1]
         return np.column_stack([rf_p, xgb_p])
@@ -157,23 +156,20 @@ class HDTTStackingClassifier(BaseEstimator, ClassifierMixin):
         meta = self._get_meta_features(X)
         return self.meta_learner.predict(meta)
 
-# =========================
-# get_models (更新定义，元学习器参数为LogisticRegression)
-# =========================
+
 def get_models(seed=42):
     hdtt_rf_base_params = dict(
         n_estimators=180, max_depth=8, min_samples_leaf=6, class_weight="balanced")
     hdtt_xgb_base_params = dict(
         n_estimators=180, max_depth=5, learning_rate=0.07, subsample=0.8, colsample_bytree=0.8, gamma=0.1, min_child_weight=1)
     
-    # 元学习器（LogisticRegression）的参数
-    # 使用l1正则化和平衡类别权重，有助于模型在少量特征上保持鲁棒性并处理不平衡数据
+    
     meta_learner_params = dict(
-        max_iter=1000,         # 增加迭代次数以确保收敛
-        class_weight="balanced", # 关键：处理类别不平衡
-        solver="liblinear",    # 适用于小数据集和l1/l2正则化
-        penalty="l1",          # L1正则化可以产生稀疏解，对特征选择有帮助
-        C=0.4                  # 正则化强度，C越小正则化越强，防止过拟合
+        max_iter=1000,        
+        class_weight="balanced", 
+        solver="liblinear",   
+        penalty="l1",          
+        C=0.4                  
     )
 
     independent_xgb_params = dict(
@@ -183,11 +179,11 @@ def get_models(seed=42):
         n_estimators=120, max_depth=5, min_samples_leaf=12, class_weight="balanced")
 
     return {
-        # 核心修改：HDTT模型使用LogisticRegression作为元学习器
+        
         "HDTT(RF+XGB+LogReg)": HDTTStackingClassifier(
             rf_params=hdtt_rf_base_params, xgb_params=hdtt_xgb_base_params,
             meta_learner_params=meta_learner_params, seed=seed, n_splits=5),
-        "LogReg": LogisticRegression(max_iter=4000, class_weight="balanced", random_state=seed), # 独立的LogReg基线
+        "LogReg": LogisticRegression(max_iter=4000, class_weight="balanced", random_state=seed), 
         "XGBoost": xgb.XGBClassifier(**independent_xgb_params, random_state=seed),
         "RF-Deep (Baseline)": RandomForestClassifier(**independent_rf_params, random_state=seed),
     }
@@ -381,7 +377,6 @@ def run_once(df_all, run_seed: int, noise_level: float):
 def plot_with_bands(df_runs, out_prefix):
     set_top_tier_style()
 
-    # 优先的绘制顺序和方法名称，HDTT名称改回 LogReg
     preferred = ["HDTT(RF+XGB+LogReg)", "RF-Deep (Baseline)", "XGBoost", "LogReg", "AGT", "SGT"]
     methods = [m for m in preferred if m in set(df_runs["method"])]
 
@@ -444,7 +439,7 @@ def plot_with_bands(df_runs, out_prefix):
     plt.tight_layout()
 
     os.makedirs("figures", exist_ok=True)
-    # 更改文件名，反映这是更"稳健"的堆叠版本
+   
     png = f"{out_prefix}.png"
     pdf = f"{out_prefix}.pdf"
     fig.savefig(png, bbox_inches="tight")
