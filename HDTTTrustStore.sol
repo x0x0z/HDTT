@@ -2,22 +2,22 @@
 pragma solidity ^0.8.19;
 
 contract HDTTTrustStore {
-    // 状态变量
-    mapping(address => uint256) public trustScore;           // 信任分数 [0,100]
-    mapping(address => uint256) public lastUpdateTimestamp;  // 上次更新时间
-    mapping(address => uint256) public volatilityCounter;    // 波动性计数
+
+    mapping(address => uint256) public trustScore;           
+    mapping(address => uint256) public lastUpdateTimestamp;  
+    mapping(address => uint256) public volatilityCounter;    
     
     address public owner;
     address public orchestrator;
     
-    // 参数
-    uint256 public constant LAMBDA = 9000;        // λ = 0.90 (千分位)
-    uint256 public constant BETA = 1000;          // β = 1.0 (千分位)
-    uint256 public constant SCORE_TTL = 300;      // 5分钟
+    
+    uint256 public constant LAMBDA = 9000;        
+    uint256 public constant BETA = 1000;          
+    uint256 public constant SCORE_TTL = 300;      
     uint256 public constant DEFAULT_SCORE = 50;
     uint256 public constant DECAY_BLOCK = 10000;
     
-    // 事件
+   
     event ScoreUpdated(address indexed user, uint256 newScore, uint256 decayedScore, uint256 timestamp);
     event ParametersChanged(uint256 lambda, uint256 beta, uint256 timestamp);
     
@@ -36,7 +36,7 @@ contract HDTTTrustStore {
         orchestrator = _orchestrator;
     }
     
-    // ========== 更新评分 (Eq.6) ==========
+   
     // S_t(a) = λ * S_{t-1}(a) + (1-λ) * s_t
     function updateScore(address user, uint256 newScore) 
         external 
@@ -62,10 +62,10 @@ contract HDTTTrustStore {
             decayedScore = DEFAULT_SCORE;
         }
         
-        // 移动平均
+        
         uint256 updatedScore = (decayedScore * LAMBDA + newScore * (10000 - LAMBDA)) / 10000;
         
-        // 波动性检测
+        
         if (oldScore > 0) {
             uint256 diff = oldScore > updatedScore ? oldScore - updatedScore : updatedScore - oldScore;
             if (diff > 5) {
@@ -75,14 +75,14 @@ contract HDTTTrustStore {
             }
         }
         
-        // 更新
+        
         trustScore[user] = updatedScore;
         lastUpdateTimestamp[user] = block.number;
         
         emit ScoreUpdated(user, updatedScore, decayedScore, block.timestamp);
     }
     
-    // ========== 获取评分 ==========
+    
     function getTrustScore(address user) 
         external 
         view 
@@ -100,7 +100,7 @@ contract HDTTTrustStore {
         return (trustScore[user], true);
     }
     
-    // ========== 自适应阈值 (Eq.7) ==========
+   
     // τ_t(a) = τ_0 + β * ν(a,t)
     function getAdaptiveThreshold(address user, uint256 baseThreshold) 
         external 
@@ -117,7 +117,7 @@ contract HDTTTrustStore {
         return adaptiveThreshold;
     }
     
-    // ========== 批量更新 ==========
+    
     function batchUpdateScores(address[] calldata users, uint256[] calldata scores) 
         external 
         onlyOrchestrator 
@@ -142,7 +142,7 @@ contract HDTTTrustStore {
         lastUpdateTimestamp[user] = block.number;
     }
     
-    // ========== 查询完整状态 ==========
+    
     function getFullStatus(address user) 
         external 
         view 
@@ -151,7 +151,7 @@ contract HDTTTrustStore {
         return (trustScore[user], volatilityCounter[user], lastUpdateTimestamp[user]);
     }
     
-    // ========== 管理 ==========
+    
     function setOrchestrator(address _orchestrator) external onlyOwner {
         orchestrator = _orchestrator;
     }
